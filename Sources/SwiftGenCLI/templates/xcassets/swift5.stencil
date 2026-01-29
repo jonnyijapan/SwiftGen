@@ -183,8 +183,8 @@
 {% endif %}
 {% if hasColor %}
 
-{{accessModifier}} final class {{colorType}} {
-  {{accessModifier}} fileprivate(set) var name: String
+{{accessModifier}} final class {{colorType}}: Sendable {
+  {{accessModifier}} let name: String
 
   #if os(macOS)
   {{accessModifier}} typealias Color = NSColor
@@ -193,12 +193,7 @@
   #endif
 
   @available(iOS 11.0, tvOS 11.0, watchOS 4.0, macOS 10.13, *)
-  {{accessModifier}} private(set) lazy var color: Color = {
-    guard let color = Color(asset: self) else {
-      fatalError("Unable to load color asset named \(name).")
-    }
-    return color
-  }()
+  public let color: Color
 
   #if os(iOS) || os(tvOS)
   @available(iOS 11.0, tvOS 11.0, *)
@@ -213,13 +208,50 @@
 
   #if canImport(SwiftUI)
   @available(iOS 13.0, tvOS 13.0, watchOS 6.0, macOS 10.15, *)
-  {{accessModifier}} private(set) lazy var swiftUIColor: SwiftUI.Color = {
-    SwiftUI.Color(asset: self)
-  }()
+  public let swiftUIColor: SwiftUI.Color
   #endif
 
   fileprivate init(name: String) {
+    // Assign name immediately so we can use it in fatalError messages if needed
     self.name = name
+
+    // Prepare a temporary UIColor/NSColor without using `self` in its initializer
+    let colorValue: Color
+    if #available(iOS 11.0, tvOS 11.0, watchOS 4.0, macOS 10.13, *) {
+      // Manually resolve from bundle to avoid calling Color(asset: self) before initialization
+      let bundle = BundleToken.bundle
+      #if os(iOS) || os(tvOS)
+      guard let c = Color(named: name, in: bundle, compatibleWith: nil) else {
+        fatalError("Unable to load color asset named \(name).")
+      }
+      colorValue = c
+      #elseif os(macOS)
+      guard let c = Color(named: NSColor.Name(name), bundle: bundle) else {
+        fatalError("Unable to load color asset named \(name).")
+      }
+      colorValue = c
+      #elseif os(watchOS)
+      guard let c = Color(named: name) else {
+        fatalError("Unable to load color asset named \(name).")
+      }
+      colorValue = c
+      #endif
+    } else {
+      // Match the previous behavior of fatalError when unavailable
+      fatalError("Color assets require newer OS versions.")
+    }
+
+    // Assign the resolved color
+    self.color = colorValue
+
+    #if canImport(SwiftUI)
+    if #available(iOS 13.0, tvOS 13.0, watchOS 6.0, macOS 10.15, *) {
+      // Now it's safe to reference `self` because all stored properties required so far are initialized
+      self.swiftUIColor = SwiftUI.Color(name, bundle: BundleToken.bundle)
+    } else {
+      fatalError("SwiftUI Color assets require newer OS versions.")
+    }
+    #endif
   }
 }
 
@@ -275,7 +307,7 @@
 {% endif %}
 {% if hasImage %}
 
-{{accessModifier}} struct {{imageType}} {
+{{accessModifier}} struct {{imageType}}: Sendable {
   {{accessModifier}} fileprivate(set) var name: String
 
   #if os(macOS)

@@ -47,7 +47,7 @@
 
 // MARK: - Implementation Details
 
-{{accessModifier}} struct {{fontType}} {
+{{accessModifier}} struct {{fontType}}: Sendable {
   {{accessModifier}} let name: String
   {{accessModifier}} let family: String
   {{accessModifier}} let path: String
